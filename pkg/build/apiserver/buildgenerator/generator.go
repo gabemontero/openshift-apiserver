@@ -13,6 +13,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation"
 	kvalidation "k8s.io/apimachinery/pkg/util/validation"
 	apirequest "k8s.io/apiserver/pkg/endpoints/request"
@@ -125,19 +126,19 @@ func fetchServiceAccountSecrets(ctx context.Context, secrets corev1client.Secret
 	return result, nil
 }
 
-func getTriggerNamespaceName(bc *buildv1.BuildConfig, triggerFrom *corev1.ObjectReference) (string, string) {
+func getTriggerNamespaceName(bc *buildv1.BuildConfig, triggerFrom *corev1.ObjectReference) k8stypes.NamespacedName {
 	triggerRef := triggerFrom
 	if triggerRef == nil {
 		triggerRef = buildutil.GetInputReference(bc.Spec.Strategy)
 		if triggerRef == nil || triggerRef.Kind != "ImageStreamTag" {
-			return "", ""
+			return k8stypes.NamespacedName{}
 		}
 	}
 	triggerNs := triggerRef.Namespace
 	if triggerNs == "" {
 		triggerNs = bc.Namespace
 	}
-	return triggerNs, triggerRef.Name
+	return k8stypes.NamespacedName{Namespace: triggerNs, Name: triggerRef.Name}
 }
 
 // findImageChangeTrigger finds an image change trigger that has a from that matches the passed in ref
@@ -157,15 +158,15 @@ func findImageChangeTrigger(bc *buildv1.BuildConfig, ref *corev1.ObjectReference
 			continue
 		}
 		imageChange := trigger.ImageChange
-		triggerNamespace, triggerName := getTriggerNamespaceName(bc, trigger.ImageChange.From)
-		if triggerName == ref.Name && triggerNamespace == refNs {
+		triggerNSN := getTriggerNamespaceName(bc, trigger.ImageChange.From)
+		if triggerNSN.Name == ref.Name && triggerNSN.Namespace == refNs {
 			requestTrigger = imageChange
 			break
 		}
 	}
 	for _, trigger := range bc.Status.ImageChangeTriggers {
-		triggerNamespace, triggerName := getTriggerNamespaceName(bc, trigger.From)
-		if triggerName == ref.Name && triggerNamespace == refNs {
+		triggerNSN := getTriggerNamespaceName(bc, trigger.From)
+		if triggerNSN.Name == ref.Name && triggerNSN.Namespace == refNs {
 			responseTrigger = &trigger
 			break
 		}
@@ -364,6 +365,7 @@ func (g *BuildGenerator) updateImageTriggers(ctx context.Context, bc *buildv1.Bu
 		requestTrigger, responseTrigger = findImageChangeTrigger(bc, from)
 	}
 	if triggeredBy != nil &&
+		//TODO we still update spec until deprecated field (drepcated in 4.8) is removed (presumably 4.9)
 		((requestTrigger != nil && requestTrigger.LastTriggeredImageID == triggeredBy.Name) ||
 			(responseTrigger != nil && responseTrigger.LastTriggeredImageID == triggeredBy.Name)) {
 		klog.V(2).Infof("Aborting imageid triggered build for BuildConfig %s/%s with imageid %s because the BuildConfig already matches this imageid", bc.Namespace, bc.Name, triggeredBy.Name)

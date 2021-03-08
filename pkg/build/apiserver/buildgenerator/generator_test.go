@@ -711,7 +711,13 @@ func TestInstantiateWithLabelsAndAnnotations(t *testing.T) {
 
 func TestFindImageTrigger(t *testing.T) {
 	defaultTrigger := &buildv1.ImageChangeTrigger{}
+	defaultTriggerResp := buildv1.ImageChangeTriggerStatus{}
 	image1Trigger := &buildv1.ImageChangeTrigger{
+		From: &corev1.ObjectReference{
+			Name: "image1:tag1",
+		},
+	}
+	image1TriggerResp := buildv1.ImageChangeTriggerStatus{
 		From: &corev1.ObjectReference{
 			Name: "image1:tag1",
 		},
@@ -722,12 +728,29 @@ func TestFindImageTrigger(t *testing.T) {
 			Namespace: "image2ns",
 		},
 	}
+	image2TriggerResp := buildv1.ImageChangeTriggerStatus{
+		From: &corev1.ObjectReference{
+			Name:      "image2:tag2",
+			Namespace: "image2ns",
+		},
+	}
 	image4Trigger := &buildv1.ImageChangeTrigger{
 		From: &corev1.ObjectReference{
 			Name: "image4:tag4",
 		},
 	}
+	image4TriggerResp := buildv1.ImageChangeTriggerStatus{
+		From: &corev1.ObjectReference{
+			Name: "image4:tag4",
+		},
+	}
 	image5Trigger := &buildv1.ImageChangeTrigger{
+		From: &corev1.ObjectReference{
+			Name:      "image5:tag5",
+			Namespace: "bcnamespace",
+		},
+	}
+	image5TriggerResp := buildv1.ImageChangeTriggerStatus{
 		From: &corev1.ObjectReference{
 			Name:      "image5:tag5",
 			Namespace: "bcnamespace",
@@ -775,24 +798,36 @@ func TestFindImageTrigger(t *testing.T) {
 				},
 			},
 		},
+		Status: buildv1.BuildConfigStatus{
+			ImageChangeTriggers: []buildv1.ImageChangeTriggerStatus{
+				defaultTriggerResp,
+				image1TriggerResp,
+				image2TriggerResp,
+				image4TriggerResp,
+				image5TriggerResp,
+			},
+		},
 	}
 
 	tests := []struct {
-		name   string
-		input  *corev1.ObjectReference
-		expect *buildv1.ImageChangeTrigger
+		name      string
+		input     *corev1.ObjectReference
+		expectReq *buildv1.ImageChangeTrigger
+		expectRsp *buildv1.ImageChangeTriggerStatus
 	}{
 		{
-			name:   "nil reference",
-			input:  nil,
-			expect: nil,
+			name:      "nil reference",
+			input:     nil,
+			expectReq: nil,
+			expectRsp: nil,
 		},
 		{
 			name: "match name",
 			input: &corev1.ObjectReference{
 				Name: "image1:tag1",
 			},
-			expect: image1Trigger,
+			expectReq: image1Trigger,
+			expectRsp: &image1TriggerResp,
 		},
 		{
 			name: "mismatched namespace",
@@ -800,7 +835,8 @@ func TestFindImageTrigger(t *testing.T) {
 				Name:      "image1:tag1",
 				Namespace: "otherns",
 			},
-			expect: nil,
+			expectReq: nil,
+			expectRsp: nil,
 		},
 		{
 			name: "match name and namespace",
@@ -808,14 +844,16 @@ func TestFindImageTrigger(t *testing.T) {
 				Name:      "image2:tag2",
 				Namespace: "image2ns",
 			},
-			expect: image2Trigger,
+			expectReq: image2Trigger,
+			expectRsp: &image2TriggerResp,
 		},
 		{
 			name: "match default trigger",
 			input: &corev1.ObjectReference{
 				Name: "image3:tag3",
 			},
-			expect: defaultTrigger,
+			expectReq: defaultTrigger,
+			expectRsp: &defaultTriggerResp,
 		},
 		{
 			name: "input includes bc namespace",
@@ -823,20 +861,43 @@ func TestFindImageTrigger(t *testing.T) {
 				Name:      "image4:tag4",
 				Namespace: "bcnamespace",
 			},
-			expect: image4Trigger,
+			expectReq: image4Trigger,
+			expectRsp: &image4TriggerResp,
 		},
 		{
 			name: "implied namespace in trigger input",
 			input: &corev1.ObjectReference{
 				Name: "image5:tag5",
 			},
-			expect: image5Trigger,
+			expectReq: image5Trigger,
+			expectRsp: &image5TriggerResp,
 		},
 	}
 
 	for _, tc := range tests {
-		result, _ := findImageChangeTrigger(bc, tc.input)
-		if result != tc.expect {
+		result, response := findImageChangeTrigger(bc, tc.input)
+		if result != tc.expectReq {
+			t.Errorf("%s: unexpected trigger for %#v: %#v", tc.name, tc.input, result)
+		}
+		if response == nil && tc.expectRsp == nil {
+			continue
+		}
+		if response != nil && tc.expectRsp == nil {
+			t.Errorf("%s: unexpected trigger for %#v: %#v", tc.name, tc.input, result)
+		}
+		if response == nil && tc.expectRsp != nil {
+			t.Errorf("%s: unexpected trigger for %#v: %#v", tc.name, tc.input, result)
+		}
+		if response.From == nil && tc.expectRsp.From == nil {
+			continue
+		}
+		if response.From != nil && tc.expectRsp.From == nil {
+			t.Errorf("%s: unexpected trigger for %#v: %#v", tc.name, tc.input, result)
+		}
+		if response.From == nil && tc.expectRsp.From != nil {
+			t.Errorf("%s: unexpected trigger for %#v: %#v", tc.name, tc.input, result)
+		}
+		if response.From.Namespace != tc.expectRsp.From.Namespace || response.From.Name != tc.expectRsp.From.Name {
 			t.Errorf("%s: unexpected trigger for %#v: %#v", tc.name, tc.input, result)
 		}
 	}
@@ -1397,7 +1458,7 @@ func TestGenerateBuildFromBuildWithBuildConfig(t *testing.T) {
 	if !reflect.DeepEqual(nonAnnotatedBuild.ObjectMeta.Labels, newBuild.ObjectMeta.Labels) {
 		t.Errorf("Build labels does not match the original Build labels")
 	}
-	// was incremented by previous test, so expect 7 now.
+	// was incremented by previous test, so expectReq 7 now.
 	if newBuild.Annotations[buildv1.BuildNumberAnnotation] != "7" {
 		t.Errorf("Build number annotation is %s expected %s", newBuild.Annotations[buildv1.BuildNumberAnnotation], "7")
 	}
