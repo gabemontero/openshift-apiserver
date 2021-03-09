@@ -112,6 +112,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/openshift/api/build/v1.GitSourceRevision":                                             schema_openshift_api_build_v1_GitSourceRevision(ref),
 		"github.com/openshift/api/build/v1.ImageChangeCause":                                              schema_openshift_api_build_v1_ImageChangeCause(ref),
 		"github.com/openshift/api/build/v1.ImageChangeTrigger":                                            schema_openshift_api_build_v1_ImageChangeTrigger(ref),
+		"github.com/openshift/api/build/v1.ImageChangeTriggerStatus":                                      schema_openshift_api_build_v1_ImageChangeTriggerStatus(ref),
 		"github.com/openshift/api/build/v1.ImageLabel":                                                    schema_openshift_api_build_v1_ImageLabel(ref),
 		"github.com/openshift/api/build/v1.ImageSource":                                                   schema_openshift_api_build_v1_ImageSource(ref),
 		"github.com/openshift/api/build/v1.ImageSourcePath":                                               schema_openshift_api_build_v1_ImageSourcePath(ref),
@@ -5245,10 +5246,26 @@ func schema_openshift_api_build_v1_BuildConfigStatus(ref common.ReferenceCallbac
 							Format:      "int64",
 						},
 					},
+					"imageChangeTriggers": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ImageChangeTriggers is used to capture the runtime state of any ImageChangeTrigger specified in the BuildConfigSpec, including reconciled values of the lastTriggeredImageID and paused fields.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("github.com/openshift/api/build/v1.ImageChangeTriggerStatus"),
+									},
+								},
+							},
+						},
+					},
 				},
 				Required: []string{"lastVersion"},
 			},
 		},
+		Dependencies: []string{
+			"github.com/openshift/api/build/v1.ImageChangeTriggerStatus"},
 	}
 }
 
@@ -6108,7 +6125,7 @@ func schema_openshift_api_build_v1_BuildTriggerPolicy(ref common.ReferenceCallba
 				Properties: map[string]spec.Schema{
 					"type": {
 						SchemaProps: spec.SchemaProps{
-							Description: "type is the type of build trigger",
+							Description: "type is the type of build trigger. Valid values:\n\n- GitHub GitHubWebHookBuildTriggerType represents a trigger that launches builds on GitHub webhook invocations\n\n- Generic GenericWebHookBuildTriggerType represents a trigger that launches builds on generic webhook invocations\n\n- GitLab GitLabWebHookBuildTriggerType represents a trigger that launches builds on GitLab webhook invocations\n\n- Bitbucket BitbucketWebHookBuildTriggerType represents a trigger that launches builds on Bitbucket webhook invocations\n\n- ImageChange ImageChangeBuildTriggerType represents a trigger that launches builds on availability of a new version of an image\n\n- ConfigChange ConfigChangeBuildTriggerType will trigger a build on an initial build config creation WARNING: In the future the behavior will change to trigger a build on any config change",
 							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
@@ -6938,7 +6955,7 @@ func schema_openshift_api_build_v1_ImageChangeTrigger(ref common.ReferenceCallba
 				Properties: map[string]spec.Schema{
 					"lastTriggeredImageID": {
 						SchemaProps: spec.SchemaProps{
-							Description: "lastTriggeredImageID is used internally by the ImageChangeController to save last used image ID for build",
+							Description: "lastTriggeredImageID is used internally by the ImageChangeController to save last used image ID for build This field is deprecated and will be removed in a future release. Deprecated",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -6961,6 +6978,48 @@ func schema_openshift_api_build_v1_ImageChangeTrigger(ref common.ReferenceCallba
 		},
 		Dependencies: []string{
 			"k8s.io/api/core/v1.ObjectReference"},
+	}
+}
+
+func schema_openshift_api_build_v1_ImageChangeTriggerStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ImageChangeTriggerStatus tracks the latest resolved status of the associated ImageChangeTrigger policy specified in the BuildConfigSpec.Triggers struct.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"lastTriggeredImageID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "lastTriggeredImageID is the sha/id of the imageref cited in the 'from' field the last time this BuildConfig was triggered. It is not necessarily the sha/id of the image change that triggered a build. This field is updated for all image change triggers when any of them triggers a build.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"from": {
+						SchemaProps: spec.SchemaProps{
+							Description: "from is the ImageStreamTag that is used as the source of the trigger. This can come from an ImageStream tag referenced in this BuildConfig's triggers, or the From image in this BuildConfig's build strategy.",
+							Ref:         ref("k8s.io/api/core/v1.ObjectReference"),
+						},
+					},
+					"paused": {
+						SchemaProps: spec.SchemaProps{
+							Description: "paused is true if this trigger is temporarily disabled, and the setting on the spec has been reconciled. Optional.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"lastTriggerTime": {
+						SchemaProps: spec.SchemaProps{
+							Description: "lastTriggerTime is the last time the BuildConfig was triggered by a change in the ImageStreamTag associated with this trigger.",
+							Default:     map[string]interface{}{},
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/api/core/v1.ObjectReference", "k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
 	}
 }
 
@@ -29175,6 +29234,13 @@ func schema_openshift_api_operator_v1_NetworkSpec(ref common.ReferenceCallback) 
 					"disableMultiNetwork": {
 						SchemaProps: spec.SchemaProps{
 							Description: "disableMultiNetwork specifies whether or not multiple pod network support should be disabled. If unset, this property defaults to 'false' and multiple network support is enabled.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"useMultiNetworkPolicy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "useMultiNetworkPolicy enables a controller which allows for MultiNetworkPolicy objects to be used on additional networks as created by Multus CNI. MultiNetworkPolicy are similar to NetworkPolicy objects, but NetworkPolicy objects only apply to the primary interface. With MultiNetworkPolicy, you can control the traffic that a pod can receive over the secondary interfaces. If unset, this property defaults to 'false' and MultiNetworkPolicy objects are ignored. If 'disableMultiNetwork' is 'true' then the value of this field is ignored.",
 							Type:        []string{"boolean"},
 							Format:      "",
 						},

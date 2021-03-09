@@ -31,6 +31,7 @@ API rule violation: list_type_missing,github.com/openshift/api/authorization/v1,
 API rule violation: list_type_missing,github.com/openshift/api/authorization/v1,UserRestriction,Selectors
 API rule violation: list_type_missing,github.com/openshift/api/authorization/v1,UserRestriction,Users
 API rule violation: list_type_missing,github.com/openshift/api/build/v1,BuildConfigSpec,Triggers
+API rule violation: list_type_missing,github.com/openshift/api/build/v1,BuildConfigStatus,ImageChangeTriggers
 API rule violation: list_type_missing,github.com/openshift/api/build/v1,BuildOutput,ImageLabels
 API rule violation: list_type_missing,github.com/openshift/api/build/v1,BuildPostCommitSpec,Args
 API rule violation: list_type_missing,github.com/openshift/api/build/v1,BuildPostCommitSpec,Command
