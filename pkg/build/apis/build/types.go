@@ -1,6 +1,7 @@
 package build
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -1045,6 +1046,10 @@ const (
 type BuildConfigStatus struct {
 	// LastVersion is used to inform about number of last triggered build.
 	LastVersion int64
+
+	// ImageChangeTriggers is used to capture the runtime state of any ImageChangeTrigger specified in the BuildConfigSpec,
+	// including reconciled values of the lastTriggeredImageID and paused fields.
+	ImageChangeTriggers []ImageChangeTriggerStatus
 }
 
 // SecretLocalReference contains information that points to the local secret being used
@@ -1084,6 +1089,23 @@ type ImageChangeTrigger struct {
 
 	// Paused is true if this trigger is temporarily disabled. Optional.
 	Paused bool
+}
+
+// ImageChangeTriggerStatus tracks the latest resolved status of the associated ImageChangeTrigger policy specified in the BuildConfigSpec.Triggers struct.
+type ImageChangeTriggerStatus struct {
+	// LastTriggeredImageID is the sha/id of the imageref cited in the 'from' field the last time this BuildConfig was triggered.
+	// It is not necessarily the sha/id of the image change that triggered a build.
+	// This field is updated for all image change triggers when any of them triggers a build.
+	LastTriggeredImageID string
+
+	// From is the ImageStreamTag that is used as the source of the trigger. This can come from an ImageStream tag referenced in this BuildConfig's triggers, or the From image in this BuildConfig's build strategy.
+	From *corev1.ObjectReference
+
+	// Paused is true if this trigger is temporarily disabled, and the setting on the spec has been reconciled. Optional.
+	Paused bool
+
+	// LastTriggerTime is the last time the BuildConfig was triggered by a change in the ImageStreamTag associated with this trigger.
+	LastTriggerTime metav1.Time
 }
 
 // BuildTriggerPolicy describes a policy for a single trigger that results in a new Build.
